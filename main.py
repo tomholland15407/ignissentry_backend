@@ -14,16 +14,16 @@ origins = [
     "https://your-frontend-project-name.vercel.app" # <-- PASTE YOUR ACTUAL LIVE VERCEL URL HERE
 ]
 
+# --- THE FOOLPROOF HACKATHON CORS BYPASS ---
+# This tells the browser: "Let ANY website talk to this backend engine"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],       # The "*" wildcard allows all domains (Vercel, localhost, mobile devices)
+    allow_credentials=False,   # CRITICAL HACKATHON NOTE: This MUST be False if origins is "*"
+    allow_methods=["*"],       # Allows all standard GET, POST, OPTIONS requests
+    allow_headers=["*"],       # Allows all header types
 )
-# -----------------------------------------------
-
-# Keep your endpoints below completely untouched!
+# --------------------------------------------
 
 @app.get("/")
 def read_root():
