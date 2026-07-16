@@ -5,6 +5,8 @@ from faker import Faker
 
 fake = Faker()
 
+# --- DYNAMIC MOCK GENERATOR CONFIGURATION ---
+
 # Real-world styled templates to mimic raw user posts
 CRISIS_TEMPLATES = [
     "HELP!!! {hazard} is happening at {location}! We are stuck here, please send emergency teams!",
@@ -53,9 +55,31 @@ def generate_single_event():
     }
 
 
+# --- FUNCTIONS REQUIRED BY MAIN.PY & AI_ENGINE.PY ---
+
 def get_latest_feed():
     """
     Simulates fetching a dynamic batch of 4 real-time messages from the internet.
     Kept small (4 items) to respect Gemini API rate limits and keep execution fast!
     """
     return [generate_single_event() for _ in range(4)]
+
+
+def get_prompt_for_post(post_text: str) -> str:
+    """
+    Constructs a detailed instruction prompt to guide Gemini's classification engine.
+    """
+    return f"""
+    You are an emergency dispatch AI parsing raw social media feeds during natural disasters.
+    Analyze the user post below and extract precise structured incident data.
+
+    User Post:
+    "{post_text}"
+
+    Extraction Guidelines:
+    1. 'is_crisis': Set to True if there is a real-world hazard, danger, or request for rescue. Set to False for casual discussion, memes, or chat.
+    2. 'category': Must be exactly one of: 'Flood', 'Fire', 'Earthquake', 'Severe Weather', 'Medical', 'Shelter', or 'Other'.
+    3. 'severity': Must be 'High' (immediate danger to life), 'Medium' (infrastructure blocks, active hazards), or 'Low' (announcements, non-urgent information).
+    4. 'location_description': The precise street, landmark, or area mentioned. Set to 'Unknown' if not mentioned.
+    5. 'people_affected': The number of people mentioned as in danger. For instance, "We and two kids" means 4. Default to 1 if unspecified.
+    """
