@@ -9,7 +9,7 @@ RAW_FEED = [
     },
     {
         "user": "@weather_watcher",
-        "text": "help for no reason Avoid the downtown highway intersection. A massive tree fell and completely blocked both lanes. Traffic is totally dead.",
+        "text": "Avoid the downtown highway intersection. A massive tree fell and completely blocked both lanes. Traffic is totally dead.",
         "timestamp": "2026-07-14T20:46:12Z"
     },
     {
