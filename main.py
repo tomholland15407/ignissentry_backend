@@ -35,12 +35,19 @@ def read_root():
 
 @app.get("/api/incidents")
 def get_incidents():
-    """Fetches list of parsed incidents from Supabase, sorted chronologically."""
+    """
+    Fetches list of parsed incidents from Supabase, sorted chronologically.
+    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured.")
     try:
         response = supabase.table("incidents").select("*").order("created_at", desc=True).execute()
-        return response.data
+
+        # Wrap the list in the exact structure the Vercel frontend is expecting!
+        return {
+            "status": "success",
+            "data": response.data
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
