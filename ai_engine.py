@@ -1,66 +1,80 @@
-# ai_engine.py
+# ai_engine.py (Production Build with Structured Google Gen AI SDK)
 import os
-from openai import OpenAI
-from dotenv import load_dotenv
-from schemas import StructuredEmergency
+import logging
+from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
+from typing import Literal
 
-# Load keys from the secret .env file safely
-load_dotenv()
+# Configure standard logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Initialize the OpenAI web client manager
-api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=api_key)
 
-def process_crisis_text(raw_text: str) -> StructuredEmergency:
+# 1. DEFINE STRUTURED SCHEMA FOR CRISIS DISPATCHING
+class CrisisInsights(BaseModel):
+    is_crisis: bool = Field(
+        description="Set to True only if this text is an active, real-time emergency (e.g. floods, fires, accidents, active physical danger). Set to False for normal traffic updates, weather forecasts, spam, or general commentary.")
+    category: Literal["Flood", "Fire", "Earthquake", "Infrastructure", "Medical", "Other"] = Field(
+        description="The primary category of the emergency.")
+    severity: Literal["Critical", "High", "Medium", "Low"] = Field(
+        description="The priority rating of the threat level to human life or structures.")
+    location_description: str = Field(
+        description="Extract any location identifiers (e.g. '4th avenue near the bakery'). If none are listed, return 'Unknown'.")
+    summary: str = Field(description="A concise, single-sentence dispatch summary of what is happening.")
+    people_affected: int = Field(
+        description="Estimated count of people in immediate danger. If a family or 'two kids' are mentioned, estimate accordingly. Default to 1.")
+
+
+# 2. RESOLVE ACCESS KEY
+API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+
+def process_crisis_text(text: str) -> CrisisInsights:
     """
-    Sends raw text to OpenAI using Structured Outputs,
-    forcing the AI model to conform exactly to our Pydantic schema.
+    Ingests text, processes it live with Google Gemini, and returns structured insights.
+    Gracefully falls back to local simulation if no cloud key is found.
     """
-    # Fallback simulation if you do not have an active OpenAI API Key yet
-    if not api_key or api_key.startswith("your_"):
-        print("[WARNING]: API Key not found. Running local fallback simulator mode.")
-        if "HELP" in raw_text.upper():
-            return StructuredEmergency(
-                is_crisis=True,
-                category="Flood",
-                severity="Critical",
-                location_description="4th avenue near the old bakery",
-                summary="Stranded on roof with two children due to flood waters.",
-                people_affected_estimate=4
-            )
-        return StructuredEmergency(
-            is_crisis=False,
-            category="Irrelevant",
-            severity="None",
-            location_description=None,
-            summary="General non-emergency chatter or noise.",
-            people_affected_estimate=0
+    if not API_KEY:
+        logger.warning("[WARNING]: API Key not found. Running local fallback simulator mode.")
+        # Safety Mock Logic to keep the hackathon app demo working offline
+        is_crisis = any(word in text.lower() for word in ["help", "water", "fire", "trapped"])
+        return CrisisInsights(
+            is_crisis=is_crisis,
+            category="Flood" if "water" in text.lower() else "Other",
+            severity="Critical" if "help" in text.lower() else "Medium",
+            location_description="4th avenue near the old bakery" if is_crisis else "Unknown",
+            summary="Stranded on roof with two children due to flood waters." if is_crisis else "General commentary.",
+            people_affected=4 if is_crisis else 1
         )
 
     try:
-        # Call the OpenAI API using structured data parsing tools
-        response = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",  # Highly cost-efficient, blazing fast model ideal for hackathons
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert emergency dispatch coordinator AI. Extract structured data from chaotic public disaster reports."
-                },
-                {
-                    "role": "user",
-                    "content": raw_text
-                }
-            ],
-            response_format=StructuredEmergency, # This binds OpenAI directly to our Pydantic guardrail schema!
+        # Initialize the GenAI Client (natively picks up GEMINI_API_KEY from environment)
+        client = genai.Client()
+
+        # Dispatch structured query to Gemini
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',  # Or use 'gemini-1.5-flash' depending on your tier
+            contents=f"Analyze this raw incoming feed text: '{text}'",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",  # Restrict model to valid JSON
+                response_schema=CrisisInsights,  # Force formatting to match Pydantic
+                system_instruction="You are an emergency crisis response dispatcher. Categorize the input efficiently to assist responders."
+            )
         )
-        return response.choices[0].message.parsed
+
+        # The modern SDK automatically parses the JSON directly back into our Pydantic object!
+        insights: CrisisInsights = response.parsed
+        return insights
+
     except Exception as e:
-        print(f"Error calling OpenAI API pipeline: {e}")
-        # Return a fallback safe record so our backend doesn't crash mid-demo
-        return StructuredEmergency(
-            is_crisis=False,
-            category="Error",
-            severity="None",
-            summary="Failed to parse text due to system exception errors.",
-            people_affected_estimate=0
+        logger.error(f"[ERROR]: Gemini API dispatch failed: {e}. Reverting to fallback.", exc_info=True)
+        # Prevent API blockages or crashes from breaking database ingestion pipeline
+        return CrisisInsights(
+            is_crisis=True,
+            category="Other",
+            severity="Medium",
+            location_description="Failed to parse due to connection issues",
+            summary="System connection error fallback.",
+            people_affected=1
         )
